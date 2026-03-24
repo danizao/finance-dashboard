@@ -471,6 +471,43 @@
             min-width: 160px;
             text-align: center;
         }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 22px;
+            font-size: 13px;
+            color: var(--text-primary);
+            z-index: 4000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s, transform 0.22s;
+            white-space: nowrap;
+            box-shadow: 0 6px 32px rgba(0,0,0,0.5);
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast-success { border-color: rgba(0,184,148,0.5); }
+        .toast-warn    { border-color: rgba(253,203,110,0.5); }
+        .toast-danger  { border-color: rgba(225,112,85,0.5); }
+
+        /* DB badge in banner */
+        .db-stats { font-size: 11px; color: var(--text-secondary); }
+        .db-clear-btn {
+            padding: 3px 10px;
+            border: 1px solid rgba(225,112,85,0.35);
+            border-radius: 4px;
+            background: transparent;
+            color: #e17055;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .db-clear-btn:hover { background: rgba(225,112,85,0.1); }
     </style>
 </head>
 <body>
@@ -508,7 +545,9 @@
         </header>
 
         <div class="csv-mode-banner" id="csv-mode-banner">
-            <span>CSV mode: <strong id="csv-banner-filename"></strong></span>
+            <span>Database: <strong id="csv-banner-filename"></strong></span>
+            <span class="db-stats" id="csv-banner-stats"></span>
+            <button class="db-clear-btn" onclick="clearDatabase()">Clear DB</button>
             <button class="csv-reset-btn" onclick="dashboard.resetToLiveData()">← Back to Live Data</button>
         </div>
 
@@ -1471,8 +1510,17 @@
                     `Latest: ${this.formatDate(csvData.yesterday)} · Period: ${csvData.month}`;
                 document.getElementById('csv-banner-filename').textContent = filename;
                 document.getElementById('csv-mode-banner').classList.add('visible');
+                // DB stats line
+                const dbStats = FinanceDB.stats();
+                const statsEl = document.getElementById('csv-banner-stats');
+                if (dbStats) {
+                    const d = new Date(dbStats.lastUpdated);
+                    statsEl.textContent = `· ${dbStats.count} transactions · updated ${d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                } else {
+                    statsEl.textContent = '';
+                }
                 document.getElementById('data-source-footer').textContent =
-                    `Loaded from CSV: ${filename}` + (skipped > 0 ? ` · ${skipped} rows skipped` : '');
+                    `Database: ${csvData.transactions.length} transactions` + (skipped > 0 ? ` · ${skipped} rows skipped on last import` : '');
 
                 document.getElementById('filter-person').value = 'all';
                 document.getElementById('filter-category').value = 'all';
@@ -1877,6 +1925,108 @@
         }
 
         // ============================================================
+        // PERSISTENT DATABASE  (localStorage)
+        // ============================================================
+
+        const FinanceDB = {
+            KEY: 'finance-dashboard-db',
+
+            _empty() {
+                return { version: '1.1', transactions: [], sources: [], lastUpdated: null };
+            },
+
+            load() {
+                try {
+                    const raw = localStorage.getItem(this.KEY);
+                    return raw ? JSON.parse(raw) : null;
+                } catch { return null; }
+            },
+
+            save(db) {
+                try {
+                    localStorage.setItem(this.KEY, JSON.stringify(db));
+                    return true;
+                } catch (e) {
+                    console.error('localStorage write failed:', e);
+                    return false;
+                }
+            },
+
+            // Dedup key: date + rounded-amount-in-cents + normalised-description + bank
+            _key(t) {
+                return `${t.date}|${Math.round(t.amount * 100)}|${(t.description || '').toLowerCase().trim()}|${(t.bank || '').toLowerCase()}`;
+            },
+
+            merge(incoming, filename) {
+                const db = this.load() || this._empty();
+
+                const existingKeys = new Set(db.transactions.map(t => this._key(t)));
+                const newTxns  = incoming.filter(t => !existingKeys.has(this._key(t)));
+                const dupCount = incoming.length - newTxns.length;
+
+                db.transactions = [...db.transactions, ...newTxns]
+                    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+                if (!db.sources.includes(filename)) db.sources.push(filename);
+                db.lastUpdated = new Date().toISOString();
+
+                const saved = this.save(db);
+                return { added: newTxns.length, duplicates: dupCount, total: db.transactions.length, db, saved };
+            },
+
+            clear() { localStorage.removeItem(this.KEY); },
+
+            stats() {
+                const db = this.load();
+                if (!db || !db.transactions.length) return null;
+                return { count: db.transactions.length, sources: db.sources || [], lastUpdated: db.lastUpdated };
+            }
+        };
+
+        // ── Toast ─────────────────────────────────────────────────────
+        function showToast(msg, type = 'info') {
+            document.querySelectorAll('.toast').forEach(t => t.remove());
+            const el = document.createElement('div');
+            el.className = `toast toast-${type}`;
+            el.textContent = msg;
+            document.body.appendChild(el);
+            requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+            setTimeout(() => {
+                el.classList.remove('show');
+                setTimeout(() => el.remove(), 300);
+            }, 5000);
+        }
+
+        // ── Clear DB ──────────────────────────────────────────────────
+        function clearDatabase() {
+            if (!confirm('Delete all stored transactions from the database?\n\nThis cannot be undone.')) return;
+            FinanceDB.clear();
+            dashboard.resetToLiveData();
+            showToast('Database cleared.', 'warn');
+        }
+
+        // ── Build a DATA-shaped object from the DB ────────────────────
+        function dbToCsvData(db) {
+            const dates = db.transactions.map(t => t.date).sort();
+            const latest = dates[dates.length - 1];
+            const first  = new Date(dates[0]  + 'T00:00:00');
+            const last   = new Date(latest     + 'T00:00:00');
+            const sameMonth = first.getMonth() === last.getMonth() && first.getFullYear() === last.getFullYear();
+            const month = sameMonth
+                ? last.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })
+                : `${first.toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })} – ${last.toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })}`;
+            const sourceLabel = db.sources.length === 1
+                ? db.sources[0]
+                : `${db.sources.length} files`;
+            return {
+                generated: db.lastUpdated || new Date().toISOString(),
+                month, yesterday: latest,
+                transactions: db.transactions, balances: [],
+                _sourceLabel: sourceLabel
+            };
+        }
+
+        // ============================================================
         // CSV IMPORT LOGIC
         // ============================================================
 
@@ -2088,26 +2238,37 @@
                 const reconciledTxns = reconcileTransfers(transactions);
                 reconciledTxns.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
 
-                const dates = reconciledTxns.map(t => t.date).sort();
-                const yesterday = dates[dates.length - 1];
-                const first = new Date(dates[0] + 'T00:00:00');
-                const last  = new Date(yesterday + 'T00:00:00');
-                const sameMonth = first.getMonth() === last.getMonth() && first.getFullYear() === last.getFullYear();
-                const month = sameMonth
-                    ? last.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })
-                    : `${first.toLocaleDateString('pt-PT', { month: 'short' })}–${last.toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })}`;
-
                 this.closeModal();
-                dashboard.loadCSVData({
-                    generated: new Date().toISOString(), month, yesterday,
-                    transactions: reconciledTxns, balances: []
-                }, this._filename, skipped);
+
+                // ── Merge into persistent DB ──────────────────────────
+                const result = FinanceDB.merge(reconciledTxns, this._filename);
+
+                if (!result.saved) {
+                    showToast('Warning: could not save to localStorage (storage full?)', 'warn');
+                }
+
+                const csvData = dbToCsvData(result.db);
+                dashboard.loadCSVData(csvData, csvData._sourceLabel, skipped);
+
+                const parts = [];
+                if (result.added > 0)      parts.push(`+${result.added} new`);
+                if (result.duplicates > 0) parts.push(`${result.duplicates} duplicates skipped`);
+                parts.push(`${result.total} total in DB`);
+                showToast(parts.join(' · '), result.added > 0 ? 'success' : 'warn');
             }
         }
 
         const csvHandler = new CSVHandler();
 
         const dashboard = new Dashboard(DATA);
+
+        // ── Auto-load persisted DB on startup ─────────────────────────
+        (function autoLoadDB() {
+            const db = FinanceDB.load();
+            if (!db || !db.transactions.length) return;
+            const csvData = dbToCsvData(db);
+            dashboard.loadCSVData(csvData, csvData._sourceLabel, 0);
+        })();
 
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
