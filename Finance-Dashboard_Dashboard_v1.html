@@ -418,6 +418,59 @@
             cursor: pointer;
         }
         .btn-secondary:hover { color: var(--text-primary); }
+
+        /* View mode bar */
+        .view-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            background: var(--bg-card);
+            padding: 12px 20px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            margin-bottom: var(--gap);
+        }
+        .view-tabs { display: flex; gap: 4px; }
+        .view-tab {
+            padding: 6px 18px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .view-tab:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.2); }
+        .view-tab.active {
+            background: rgba(108,92,231,0.2);
+            border-color: var(--accent);
+            color: var(--accent);
+            font-weight: 600;
+        }
+        .period-nav { display: flex; align-items: center; gap: 10px; }
+        .period-nav button {
+            width: 30px; height: 30px;
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            line-height: 1;
+        }
+        .period-nav button:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.3); }
+        .period-label {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            min-width: 160px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -459,15 +512,28 @@
             <button class="csv-reset-btn" onclick="dashboard.resetToLiveData()">← Back to Live Data</button>
         </div>
 
+        <div class="view-bar" id="view-bar">
+            <div class="view-tabs">
+                <button class="view-tab" data-view="year"  onclick="dashboard.setView('year')">Year</button>
+                <button class="view-tab active" data-view="month" onclick="dashboard.setView('month')">Month</button>
+                <button class="view-tab" data-view="day"   onclick="dashboard.setView('day')">Day</button>
+            </div>
+            <div class="period-nav">
+                <button onclick="dashboard.prevPeriod()">‹</button>
+                <span class="period-label" id="period-label"></span>
+                <button onclick="dashboard.nextPeriod()">›</button>
+            </div>
+        </div>
+
         <section class="kpi-row" id="kpi-row"></section>
 
         <section class="chart-row">
             <div class="chart-container">
-                <h3>Spending by Category (Month-to-Date)</h3>
+                <h3 id="category-chart-title">Spending by Category</h3>
                 <canvas id="category-chart"></canvas>
             </div>
             <div class="chart-container">
-                <h3>Daily Cash Flow (This Month)</h3>
+                <h3 id="cashflow-chart-title">Daily Cash Flow</h3>
                 <canvas id="cashflow-chart"></canvas>
             </div>
         </section>
@@ -478,7 +544,7 @@
                 <canvas id="balance-chart"></canvas>
             </div>
             <div class="chart-container">
-                <h3>Income vs Expenses (Month-to-Date)</h3>
+                <h3 id="income-expense-chart-title">Income vs Expenses</h3>
                 <canvas id="income-expense-chart"></canvas>
             </div>
         </section>
@@ -1240,14 +1306,94 @@
                 this.data = data;
                 this.filteredTransactions = data.transactions;
                 this.charts = {};
+                // Period state
+                const yd = (data.yesterday || new Date().toISOString().substring(0,10)).split('-');
+                this.selectedYear  = parseInt(yd[0]);
+                this.selectedMonth = parseInt(yd[1]) - 1; // 0-indexed
+                this.selectedDay   = data.yesterday || new Date().toISOString().substring(0,10);
+                this.viewMode = 'month';
                 this.init();
             }
 
             init() {
                 document.getElementById('date-info').textContent =
                     `Yesterday: ${this.formatDate(this.data.yesterday)} · Month: ${this.data.month}`;
-
                 this.populateCategoryFilter();
+                this.updatePeriodUI();
+                this.reRenderAll();
+            }
+
+            formatDate(d) {
+                const date = new Date(d + 'T00:00:00');
+                return date.toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' });
+            }
+
+            // ── Period navigation ──────────────────────────────────────
+            setView(mode) {
+                this.viewMode = mode;
+                if (mode === 'day') {
+                    // Snap to the latest day within the current period
+                    const txns = this.getPeriodTransactions();
+                    if (txns.length) {
+                        this.selectedDay = txns.reduce((a, b) => a.date > b.date ? a : b).date;
+                    }
+                } else if (mode === 'month') {
+                    // Snap year/month to whichever month selectedDay belongs to
+                    const yd = this.selectedDay.split('-');
+                    this.selectedYear  = parseInt(yd[0]);
+                    this.selectedMonth = parseInt(yd[1]) - 1;
+                }
+                this.updatePeriodUI();
+                this.reRenderAll();
+            }
+
+            prevPeriod() {
+                if (this.viewMode === 'year') {
+                    this.selectedYear--;
+                } else if (this.viewMode === 'month') {
+                    if (this.selectedMonth === 0) { this.selectedMonth = 11; this.selectedYear--; }
+                    else this.selectedMonth--;
+                } else {
+                    const d = new Date(this.selectedDay + 'T00:00:00');
+                    d.setDate(d.getDate() - 1);
+                    this.selectedDay = d.toISOString().substring(0, 10);
+                }
+                this.updatePeriodUI();
+                this.reRenderAll();
+            }
+
+            nextPeriod() {
+                if (this.viewMode === 'year') {
+                    this.selectedYear++;
+                } else if (this.viewMode === 'month') {
+                    if (this.selectedMonth === 11) { this.selectedMonth = 0; this.selectedYear++; }
+                    else this.selectedMonth++;
+                } else {
+                    const d = new Date(this.selectedDay + 'T00:00:00');
+                    d.setDate(d.getDate() + 1);
+                    this.selectedDay = d.toISOString().substring(0, 10);
+                }
+                this.updatePeriodUI();
+                this.reRenderAll();
+            }
+
+            updatePeriodUI() {
+                document.querySelectorAll('.view-tab').forEach(btn =>
+                    btn.classList.toggle('active', btn.dataset.view === this.viewMode));
+                const lbl = document.getElementById('period-label');
+                if (this.viewMode === 'year') {
+                    lbl.textContent = String(this.selectedYear);
+                } else if (this.viewMode === 'month') {
+                    lbl.textContent = new Date(this.selectedYear, this.selectedMonth, 1)
+                        .toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+                } else {
+                    lbl.textContent = this.formatDate(this.selectedDay);
+                }
+            }
+
+            reRenderAll() {
+                Object.values(this.charts).forEach(c => c.destroy());
+                this.charts = {};
                 this.renderKPIs();
                 this.renderCategoryChart();
                 this.renderCashFlowChart();
@@ -1256,9 +1402,25 @@
                 this.renderTransactionsTable();
             }
 
-            formatDate(d) {
-                const date = new Date(d + 'T00:00:00');
-                return date.toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' });
+            getPeriodTransactions() {
+                if (this.viewMode === 'year') {
+                    const y = String(this.selectedYear);
+                    return this.filteredTransactions.filter(t => t.date.startsWith(y));
+                } else if (this.viewMode === 'month') {
+                    const prefix = `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
+                    return this.filteredTransactions.filter(t => t.date.startsWith(prefix));
+                } else {
+                    return this.filteredTransactions.filter(t => t.date === this.selectedDay);
+                }
+            }
+
+            // Latest-day transactions within the current period (for month/year view KPIs)
+            getLatestDay() {
+                if (this.viewMode === 'day') return this.getPeriodTransactions();
+                const period = this.getPeriodTransactions();
+                if (!period.length) return [];
+                const latest = period.reduce((a, b) => a.date > b.date ? a : b).date;
+                return period.filter(t => t.date === latest);
             }
 
             populateCategoryFilter(reset = false) {
@@ -1296,10 +1458,17 @@
                 this.filteredTransactions = csvData.transactions;
                 this.csvMode = true;
 
+                // Set period state from CSV data
+                const yd = csvData.yesterday.split('-');
+                this.selectedYear  = parseInt(yd[0]);
+                this.selectedMonth = parseInt(yd[1]) - 1;
+                this.selectedDay   = csvData.yesterday;
+                // If CSV spans multiple months default to year view, otherwise month
+                const months = new Set(csvData.transactions.map(t => t.date.substring(0, 7)));
+                this.viewMode = months.size > 1 ? 'year' : 'month';
+
                 document.getElementById('date-info').textContent =
                     `Latest: ${this.formatDate(csvData.yesterday)} · Period: ${csvData.month}`;
-                document.getElementById('transactions-table-title').textContent =
-                    `Latest Transactions (${this.formatDate(csvData.yesterday)})`;
                 document.getElementById('csv-banner-filename').textContent = filename;
                 document.getElementById('csv-mode-banner').classList.add('visible');
                 document.getElementById('data-source-footer').textContent =
@@ -1309,16 +1478,8 @@
                 document.getElementById('filter-category').value = 'all';
                 this.updateBankFilter();
                 this.populateCategoryFilter(true);
-
-                Object.values(this.charts).forEach(c => c.destroy());
-                this.charts = {};
-
-                this.renderKPIs();
-                this.renderCategoryChart();
-                this.renderCashFlowChart();
-                this.renderBalanceChart();
-                this.renderIncomeExpenseChart();
-                this.renderTransactionsTable();
+                this.updatePeriodUI();
+                this.reRenderAll();
             }
 
             resetToLiveData() {
@@ -1327,9 +1488,14 @@
                 this.filteredTransactions = this._liveData.transactions;
                 this.csvMode = false;
 
+                const yd = this.data.yesterday.split('-');
+                this.selectedYear  = parseInt(yd[0]);
+                this.selectedMonth = parseInt(yd[1]) - 1;
+                this.selectedDay   = this.data.yesterday;
+                this.viewMode = 'month';
+
                 document.getElementById('date-info').textContent =
                     `Yesterday: ${this.formatDate(this.data.yesterday)} · Month: ${this.data.month}`;
-                document.getElementById('transactions-table-title').textContent = "Yesterday's Transactions";
                 document.getElementById('csv-mode-banner').classList.remove('visible');
                 document.getElementById('data-source-footer').textContent = 'Data sourced via Enable Banking API (PSD2)';
 
@@ -1337,69 +1503,76 @@
                 document.getElementById('filter-category').value = 'all';
                 this.updateBankFilter();
                 this.populateCategoryFilter(true);
-
-                Object.values(this.charts).forEach(c => c.destroy());
-                this.charts = {};
-
-                this.renderKPIs();
-                this.renderCategoryChart();
-                this.renderCashFlowChart();
-                this.renderBalanceChart();
-                this.renderIncomeExpenseChart();
-                this.renderTransactionsTable();
+                this.updatePeriodUI();
+                this.reRenderAll();
             }
 
             applyFilters() {
                 const person = document.getElementById('filter-person').value;
-                const bank = document.getElementById('filter-bank').value;
-                const cat = document.getElementById('filter-category').value;
-
+                const bank   = document.getElementById('filter-bank').value;
+                const cat    = document.getElementById('filter-category').value;
                 this.filteredTransactions = this.data.transactions.filter(t => {
                     if (person !== 'all' && (t.person || 'Shared') !== person) return false;
-                    if (bank !== 'all' && t.bank !== bank) return false;
-                    if (cat !== 'all' && t.category !== cat) return false;
+                    if (bank   !== 'all' && t.bank !== bank) return false;
+                    if (cat    !== 'all' && t.category !== cat) return false;
                     return true;
                 });
-
-                this.renderKPIs();
-                this.updateCharts();
-                this.renderTransactionsTable();
+                this.reRenderAll();
             }
 
-            getYesterday() {
-                return this.filteredTransactions.filter(t => t.date === this.data.yesterday);
-            }
-
-            getMonthToDate() {
-                return this.filteredTransactions;
-            }
+            // Kept for compatibility
+            getYesterday()    { return this.getLatestDay(); }
+            getMonthToDate()  { return this.getPeriodTransactions(); }
 
             renderKPIs() {
-                const yesterday = this.getYesterday();
-                const mtd = this.getMonthToDate();
-
-                const yIncome = yesterday.filter(t => t.amount > 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
-                const yExpense = yesterday.filter(t => t.amount < 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
-                const yNet = yIncome + yExpense;
-
-                const mtdIncome = mtd.filter(t => t.amount > 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
-                const mtdExpense = mtd.filter(t => t.amount < 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
-                const mtdNet = mtdIncome + mtdExpense;
-
+                const period = this.getPeriodTransactions();
+                const income  = period.filter(t => t.amount > 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                const expense = period.filter(t => t.amount < 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                const net = income + expense;
                 const totalBalance = this.data.balances.reduce((s, b) => s + b.balance, 0);
-                const txCount = yesterday.length;
+                const incCount = period.filter(t => t.amount > 0 && !t.is_transfer).length;
+                const expCount = period.filter(t => t.amount < 0 && !t.is_transfer).length;
 
-                const kpis = [
-                    { label: "Yesterday Net", value: formatEUR(yNet), change: yNet >= 0 ? 'positive' : 'negative', sub: `${txCount} transactions` },
-                    { label: "Yesterday Income", value: formatEUR(yIncome), change: 'positive', sub: formatEUR(yExpense) + ' expenses' },
-                    { label: "MTD Income", value: formatEUR(mtdIncome), change: 'positive', sub: `${mtd.filter(t => t.amount > 0 && !t.is_transfer).length} entries` },
-                    { label: "MTD Expenses", value: formatEUR(Math.abs(mtdExpense)), change: 'negative', sub: `${mtd.filter(t => t.amount < 0 && !t.is_transfer).length} entries` },
-                    { label: "MTD Net", value: formatEUR(mtdNet), change: mtdNet >= 0 ? 'positive' : 'negative', sub: 'income − expenses' },
-                    { label: "Total Balances", value: formatEUR(totalBalance), change: 'positive', sub: `${this.data.balances.length} accounts` },
-                ];
+                let kpis;
 
-                const row = document.getElementById('kpi-row');
-                row.innerHTML = kpis.map(k => `
+                if (this.viewMode === 'year') {
+                    const activeMonths = Math.max(new Set(period.filter(t => !t.is_transfer).map(t => t.date.substring(0, 7))).size, 1);
+                    kpis = [
+                        { label: "Year Income",          value: formatEUR(income),                         change: 'positive', sub: `${incCount} entries` },
+                        { label: "Year Expenses",        value: formatEUR(Math.abs(expense)),              change: 'negative', sub: `${expCount} entries` },
+                        { label: "Year Net",             value: formatEUR(net),                            change: net >= 0 ? 'positive' : 'negative', sub: 'income − expenses' },
+                        { label: "Monthly Avg Income",   value: formatEUR(income / activeMonths),          change: 'positive', sub: `over ${activeMonths} month${activeMonths !== 1 ? 's' : ''}` },
+                        { label: "Monthly Avg Expenses", value: formatEUR(Math.abs(expense / activeMonths)), change: 'negative', sub: `over ${activeMonths} month${activeMonths !== 1 ? 's' : ''}` },
+                        { label: "Total Balances",       value: formatEUR(totalBalance),                   change: 'positive', sub: `${this.data.balances.length} accounts` },
+                    ];
+                } else if (this.viewMode === 'month') {
+                    const latest = this.getLatestDay();
+                    const latestDate   = latest.length ? latest[0].date : '';
+                    const latestLabel  = latestDate ? this.formatDate(latestDate) : 'Latest Day';
+                    const latestInc    = latest.filter(t => t.amount > 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                    const latestExp    = latest.filter(t => t.amount < 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                    kpis = [
+                        { label: "Month Income",   value: formatEUR(income),            change: 'positive', sub: `${incCount} entries` },
+                        { label: "Month Expenses", value: formatEUR(Math.abs(expense)), change: 'negative', sub: `${expCount} entries` },
+                        { label: "Month Net",      value: formatEUR(net),               change: net >= 0 ? 'positive' : 'negative', sub: 'income − expenses' },
+                        { label: `Income — ${latestLabel}`,   value: formatEUR(latestInc),            change: 'positive', sub: `${latest.filter(t=>t.amount>0&&!t.is_transfer).length} entries` },
+                        { label: `Expenses — ${latestLabel}`, value: formatEUR(Math.abs(latestExp)),  change: 'negative', sub: `${latest.filter(t=>!t.is_transfer).length} transactions` },
+                        { label: "Total Balances", value: formatEUR(totalBalance),      change: 'positive', sub: `${this.data.balances.length} accounts` },
+                    ];
+                } else { // day
+                    const txCount = period.filter(t => !t.is_transfer).length;
+                    const transferCount = period.filter(t => t.is_transfer).length;
+                    kpis = [
+                        { label: "Day Income",       value: formatEUR(income),            change: 'positive', sub: `${incCount} entries` },
+                        { label: "Day Expenses",     value: formatEUR(Math.abs(expense)), change: 'negative', sub: `${expCount} entries` },
+                        { label: "Day Net",          value: formatEUR(net),               change: net >= 0 ? 'positive' : 'negative', sub: 'income − expenses' },
+                        { label: "Transactions",     value: String(txCount),              change: 'positive', sub: transferCount ? `+ ${transferCount} internal transfers` : 'no internal transfers' },
+                        { label: "Avg Expense Size", value: expCount ? formatEUR(Math.abs(expense / expCount)) : '—', change: 'negative', sub: 'per expense entry' },
+                        { label: "Total Balances",   value: formatEUR(totalBalance),      change: 'positive', sub: `${this.data.balances.length} accounts` },
+                    ];
+                }
+
+                document.getElementById('kpi-row').innerHTML = kpis.map(k => `
                     <div class="kpi-card">
                         <div class="kpi-label">${k.label}</div>
                         <div class="kpi-value kpi-change ${k.change}">${k.value}</div>
@@ -1409,86 +1582,140 @@
             }
 
             renderCategoryChart() {
-                const mtd = this.getMonthToDate().filter(t => t.amount < 0 && !t.is_transfer);
+                const period = this.getPeriodTransactions().filter(t => t.amount < 0 && !t.is_transfer);
                 const byCategory = {};
-                mtd.forEach(t => {
-                    byCategory[t.category] = (byCategory[t.category] || 0) + Math.abs(t.amount);
-                });
-
+                period.forEach(t => { byCategory[t.category] = (byCategory[t.category] || 0) + Math.abs(t.amount); });
                 const sorted = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
-                const labels = sorted.map(s => s[0]);
-                const data = sorted.map(s => s[1]);
+
+                const periodLabel = this.viewMode === 'year' ? String(this.selectedYear)
+                    : this.viewMode === 'month'
+                        ? new Date(this.selectedYear, this.selectedMonth, 1).toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })
+                        : this.formatDate(this.selectedDay);
+                document.getElementById('category-chart-title').textContent = `Spending by Category — ${periodLabel}`;
 
                 const ctx = document.getElementById('category-chart').getContext('2d');
                 this.charts.category = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels,
-                        datasets: [{ data, backgroundColor: COLORS.map(c => c + 'CC'), borderColor: 'transparent', borderWidth: 0 }]
+                        labels: sorted.map(s => s[0]),
+                        datasets: [{ data: sorted.map(s => s[1]), backgroundColor: COLORS.map(c => c + 'CC'), borderColor: 'transparent', borderWidth: 0 }]
                     },
                     options: {
                         responsive: true, maintainAspectRatio: false, cutout: '65%',
                         plugins: {
                             legend: { position: 'right', labels: { color: '#8b8fa3', usePointStyle: true, padding: 12, font: { size: 11 } } },
-                            tooltip: {
-                                callbacks: {
-                                    label: ctx => {
-                                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                                        return `${ctx.label}: ${formatEUR(ctx.parsed)} (${((ctx.parsed / total) * 100).toFixed(1)}%)`;
-                                    }
-                                }
-                            }
+                            tooltip: { callbacks: { label: ctx => { const total = ctx.dataset.data.reduce((a,b)=>a+b,0); return `${ctx.label}: ${formatEUR(ctx.parsed)} (${((ctx.parsed/total)*100).toFixed(1)}%)`; } } }
                         }
                     }
                 });
             }
 
             renderCashFlowChart() {
-                const mtd = this.getMonthToDate().filter(t => !t.is_transfer);
-                const byDay = {};
-                mtd.forEach(t => {
-                    if (!byDay[t.date]) byDay[t.date] = { income: 0, expense: 0 };
-                    if (t.amount > 0) byDay[t.date].income += t.amount;
-                    else byDay[t.date].expense += t.amount;
-                });
-
-                const days = Object.keys(byDay).sort();
-                this.cashflowDays = days;
-                const income = days.map(d => byDay[d].income);
-                const expense = days.map(d => Math.abs(byDay[d].expense));
-                const labels = days.map(d => {
-                    const date = new Date(d + 'T00:00:00');
-                    return date.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
-                });
-
                 const ctx = document.getElementById('cashflow-chart').getContext('2d');
-                this.charts.cashflow = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels,
-                        datasets: [
-                            { label: 'Income', data: income, backgroundColor: '#00b89488', borderRadius: 4 },
-                            { label: 'Expenses', data: expense, backgroundColor: '#e1705588', borderRadius: 4 }
-                        ]
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        onClick: (event, elements) => {
-                            if (elements.length > 0) {
-                                const idx = elements[0].index;
-                                this.showDayModal(this.cashflowDays[idx]);
+
+                if (this.viewMode === 'year') {
+                    // Monthly bars — click drills into that month
+                    const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                    const byMonth = Array.from({length: 12}, () => ({ income: 0, expense: 0 }));
+                    this.getPeriodTransactions().filter(t => !t.is_transfer).forEach(t => {
+                        const m = parseInt(t.date.substring(5, 7)) - 1;
+                        if (t.amount > 0) byMonth[m].income += t.amount;
+                        else byMonth[m].expense += t.amount;
+                    });
+                    this.cashflowDays = Array.from({length: 12}, (_, i) => `${this.selectedYear}-${String(i+1).padStart(2,'0')}`);
+                    document.getElementById('cashflow-chart-title').textContent = `Monthly Cash Flow — ${this.selectedYear}`;
+                    this.charts.cashflow = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: MONTHS_PT,
+                            datasets: [
+                                { label: 'Income',   data: byMonth.map(m => m.income),          backgroundColor: '#00b89488', borderRadius: 4 },
+                                { label: 'Expenses', data: byMonth.map(m => Math.abs(m.expense)), backgroundColor: '#e1705588', borderRadius: 4 }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            onClick: (event, elements) => {
+                                if (elements.length > 0) {
+                                    this.selectedMonth = elements[0].index;
+                                    this.setView('month');
+                                }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#8b8fa3', usePointStyle: true, font: { size: 11 } } },
+                                tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${formatEUR(ctx.parsed.y)}` } }
+                            },
+                            scales: {
+                                x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
+                                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8b8fa3', callback: v => formatEUR(v) } }
                             }
-                        },
-                        plugins: {
-                            legend: { labels: { color: '#8b8fa3', usePointStyle: true, font: { size: 11 } } },
-                            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${formatEUR(ctx.parsed.y)}` } }
-                        },
-                        scales: {
-                            x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
-                            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8b8fa3', callback: v => formatEUR(v) } }
                         }
-                    }
-                });
+                    });
+
+                } else if (this.viewMode === 'day') {
+                    // Horizontal bars: top transactions by absolute amount
+                    const txns = this.getPeriodTransactions().filter(t => !t.is_transfer)
+                        .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 12);
+                    document.getElementById('cashflow-chart-title').textContent = `Top Transactions — ${this.formatDate(this.selectedDay)}`;
+                    this.charts.cashflow = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: txns.map(t => t.description.length > 22 ? t.description.substring(0,22)+'…' : t.description),
+                            datasets: [{ data: txns.map(t => Math.abs(t.amount)), backgroundColor: txns.map(t => t.amount >= 0 ? '#00b89488' : '#e1705588'), borderRadius: 4 }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: { callbacks: { label: (c) => formatEUR(txns[c.dataIndex].amount) } }
+                            },
+                            scales: {
+                                x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8b8fa3', callback: v => formatEUR(v) } },
+                                y: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } }
+                            }
+                        }
+                    });
+
+                } else {
+                    // Month view — daily bars (existing logic)
+                    const byDay = {};
+                    this.getPeriodTransactions().filter(t => !t.is_transfer).forEach(t => {
+                        if (!byDay[t.date]) byDay[t.date] = { income: 0, expense: 0 };
+                        if (t.amount > 0) byDay[t.date].income += t.amount;
+                        else byDay[t.date].expense += t.amount;
+                    });
+                    const days = Object.keys(byDay).sort();
+                    this.cashflowDays = days;
+                    document.getElementById('cashflow-chart-title').textContent =
+                        `Daily Cash Flow — ${new Date(this.selectedYear, this.selectedMonth, 1).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}`;
+                    this.charts.cashflow = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: days.map(d => new Date(d+'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })),
+                            datasets: [
+                                { label: 'Income',   data: days.map(d => byDay[d].income),          backgroundColor: '#00b89488', borderRadius: 4 },
+                                { label: 'Expenses', data: days.map(d => Math.abs(byDay[d].expense)), backgroundColor: '#e1705588', borderRadius: 4 }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            onClick: (event, elements) => {
+                                if (elements.length > 0) {
+                                    const idx = elements[0].index;
+                                    this.showDayModal(this.cashflowDays[idx]);
+                                }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#8b8fa3', usePointStyle: true, font: { size: 11 } } },
+                                tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${formatEUR(ctx.parsed.y)}` } }
+                            },
+                            scales: {
+                                x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
+                                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8b8fa3', callback: v => formatEUR(v) } }
+                            }
+                        }
+                    });
+                }
             }
 
             showDayModal(dateStr) {
@@ -1566,7 +1793,12 @@
             }
 
             renderIncomeExpenseChart() {
-                const mtd = this.getMonthToDate().filter(t => !t.is_transfer);
+                const mtd = this.getPeriodTransactions().filter(t => !t.is_transfer);
+                const periodLabel = this.viewMode === 'year' ? String(this.selectedYear)
+                    : this.viewMode === 'month'
+                        ? new Date(this.selectedYear, this.selectedMonth, 1).toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })
+                        : this.formatDate(this.selectedDay);
+                document.getElementById('income-expense-chart-title').textContent = `Income vs Expenses — ${periodLabel}`;
                 const totalIncome = mtd.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
                 const totalExpense = Math.abs(mtd.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0));
 
@@ -1597,58 +1829,40 @@
                 });
             }
 
-            updateCharts() {
-                // Category (exclude transfers)
-                const mtdExp = this.getMonthToDate().filter(t => t.amount < 0 && !t.is_transfer);
-                const byCategory = {};
-                mtdExp.forEach(t => { byCategory[t.category] = (byCategory[t.category] || 0) + Math.abs(t.amount); });
-                const sorted = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
-                this.charts.category.data.labels = sorted.map(s => s[0]);
-                this.charts.category.data.datasets[0].data = sorted.map(s => s[1]);
-                this.charts.category.update('none');
-
-                // Cashflow (exclude transfers)
-                const mtd = this.getMonthToDate().filter(t => !t.is_transfer);
-                const byDay = {};
-                mtd.forEach(t => {
-                    if (!byDay[t.date]) byDay[t.date] = { income: 0, expense: 0 };
-                    if (t.amount > 0) byDay[t.date].income += t.amount;
-                    else byDay[t.date].expense += t.amount;
-                });
-                const days = Object.keys(byDay).sort();
-                this.cashflowDays = days;
-                this.charts.cashflow.data.labels = days.map(d => new Date(d + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }));
-                this.charts.cashflow.data.datasets[0].data = days.map(d => byDay[d].income);
-                this.charts.cashflow.data.datasets[1].data = days.map(d => Math.abs(byDay[d].expense));
-                this.charts.cashflow.update('none');
-
-                // Income vs Expense (exclude transfers)
-                const totalIncome = mtd.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-                const totalExpense = Math.abs(mtd.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0));
-                this.charts.incomeExpense.data.datasets[0].data = [totalIncome, totalExpense, totalIncome - totalExpense];
-                this.charts.incomeExpense.update('none');
-            }
-
             renderTransactionsTable() {
-                const yesterday = this.getYesterday().sort((a, b) => a.amount - b.amount);
+                // Update section title
+                const titleEl = document.getElementById('transactions-table-title');
+                if (this.viewMode === 'year') {
+                    titleEl.textContent = `All Transactions — ${this.selectedYear}`;
+                } else if (this.viewMode === 'month') {
+                    titleEl.textContent = `All Transactions — ${new Date(this.selectedYear, this.selectedMonth, 1).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}`;
+                } else {
+                    titleEl.textContent = `Transactions — ${this.formatDate(this.selectedDay)}`;
+                }
+
+                // All period transactions, sorted by date desc then amount asc
+                const txns = this.getPeriodTransactions()
+                    .slice().sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : a.amount - b.amount);
                 const container = document.getElementById('transactions-table');
 
-                if (yesterday.length === 0) {
-                    container.innerHTML = '<p style="color: var(--text-secondary); padding: 20px 0;">No transactions for yesterday with current filters.</p>';
+                if (txns.length === 0) {
+                    container.innerHTML = '<p style="color:var(--text-secondary);padding:20px 0">No transactions for this period with current filters.</p>';
                     return;
                 }
 
                 let html = '<table class="data-table"><thead><tr>';
-                html += '<th>Description</th><th>Category</th><th>Bank</th><th>Person</th><th style="text-align:right">Amount</th>';
+                html += '<th>Date</th><th>Description</th><th>Category</th><th>Bank</th><th>Person</th><th style="text-align:right">Amount</th>';
                 html += '</tr></thead><tbody>';
 
-                yesterday.forEach(t => {
+                txns.forEach(t => {
                     const amountClass = t.amount >= 0 ? 'amount-positive' : 'amount-negative';
                     const person = t.person || 'Shared';
                     const personColor = person === 'Daniel' ? '#74b9ff' : person === 'Sandra' ? '#fd79a8' : '#a29bfe';
                     const rowStyle = t.is_transfer ? ' style="opacity:0.55;font-style:italic;"' : '';
                     const transferBadge = t.is_transfer ? ' <span style="font-size:10px;background:#6c5ce733;color:#a29bfe;border-radius:3px;padding:1px 5px;vertical-align:middle">transfer</span>' : '';
+                    const dateLabel = new Date(t.date+'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
                     html += `<tr${rowStyle}>
+                        <td style="color:var(--text-secondary);font-size:12px;white-space:nowrap">${dateLabel}</td>
                         <td>${t.description}${transferBadge}</td>
                         <td>${t.category}</td>
                         <td><span class="bank-badge bank-${t.bank}">${t.bank}</span></td>
@@ -1884,7 +2098,7 @@
                     : `${first.toLocaleDateString('pt-PT', { month: 'short' })}–${last.toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })}`;
 
                 this.closeModal();
-                window.dashboard.loadCSVData({
+                dashboard.loadCSVData({
                     generated: new Date().toISOString(), month, yesterday,
                     transactions: reconciledTxns, balances: []
                 }, this._filename, skipped);
