@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Finance Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
+    <style>
+        :root {
+            --bg-primary: #0f1117;
+            --bg-card: #1a1d29;
+            --bg-header: #12141f;
+            --text-primary: #e8eaed;
+            --text-secondary: #8b8fa3;
+            --text-on-dark: #ffffff;
+            --accent: #6c5ce7;
+            --positive: #00b894;
+            --negative: #e17055;
+            --neutral: #636e72;
+            --border: rgba(255,255,255,0.06);
+            --gap: 16px;
+            --radius: 12px;
+            --bankinter: #e74c3c;
+            --cgd: #2980b9;
+            --activobank: #f39c12;
+            --revolut: #6c5ce7;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--gap);
+        }
+
+        .dashboard-header {
+            background: var(--bg-header);
+            padding: 20px 24px;
+            border-radius: var(--radius);
+            margin-bottom: var(--gap);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .dashboard-header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dashboard-header .date-info {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .filters {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group select {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .filter-group select option {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        /* KPI Cards */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: var(--gap);
+            margin-bottom: var(--gap);
+        }
+
+        .kpi-card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .kpi-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 6px;
+        }
+
+        .kpi-value {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .kpi-sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .kpi-change { font-size: 12px; font-weight: 600; }
+        .kpi-change.positive { color: var(--positive); }
+        .kpi-change.negative { color: var(--negative); }
+
+        /* Bank badges */
+        .bank-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .bank-Bankinter { background: rgba(231,76,60,0.15); color: #e74c3c; }
+        .bank-CGD { background: rgba(41,128,185,0.15); color: #74b9ff; }
+        .bank-ActivoBank { background: rgba(243,156,18,0.15); color: #f39c12; }
+        .bank-Revolut { background: rgba(108,92,231,0.15); color: #a29bfe; }
+
+        /* Charts */
+        .chart-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: var(--gap);
+            margin-bottom: var(--gap);
+        }
+
+        .chart-container {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            border: 1px solid var(--border);
+        }
+
+        .chart-container h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+
+        .chart-container canvas {
+            max-height: 280px;
+        }
+
+        /* Transaction Table */
+        .table-section {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            border: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .table-section h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .data-table thead th {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .data-table thead th:hover { color: var(--text-primary); }
+
+        .data-table tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+        .amount-positive { color: var(--positive); }
+        .amount-negative { color: var(--negative); }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        /* Cash flow bar */
+        .cashflow-bar {
+            display: flex;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+            background: rgba(255,255,255,0.05);
+        }
+        .cashflow-in { background: var(--positive); }
+        .cashflow-out { background: var(--negative); }
+
+        /* Day drill-down modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px 32px;
+            width: min(680px, 94vw);
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+        .modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+        .modal-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 22px;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 4px;
+        }
+        .modal-close:hover { color: var(--text-primary); }
+        #cashflow-chart { cursor: pointer; }
+
+        @media (max-width: 768px) {
+            .dashboard-header { flex-direction: column; align-items: flex-start; }
+            .kpi-row { grid-template-columns: repeat(2, 1fr); }
+            .chart-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <div>
+                <h1>Daily Finance Dashboard</h1>
+                <div class="date-info" id="date-info">Loading...</div>
+            </div>
+            <div class="filters">
+                <div class="filter-group">
+                    <select id="filter-person" onchange="dashboard.applyFilters()">
+                        <option value="all">👥 All</option>
+                        <option value="Daniel">🧑 Daniel</option>
+                        <option value="Sandra">👩 Sandra</option>
+                        <option value="Shared">🏦 Shared</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="filter-bank" onchange="dashboard.applyFilters()">
+                        <option value="all">All Banks</option>
+                        <option value="Bankinter">Bankinter</option>
+                        <option value="CGD">CGD</option>
+                        <option value="ActivoBank">ActivoBank</option>
+                        <option value="Revolut">Revolut</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="filter-category" onchange="dashboard.applyFilters()">
+                        <option value="all">All Categories</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <section class="kpi-row" id="kpi-row"></section>
+
+        <section class="chart-row">
+            <div class="chart-container">
+                <h3>Spending by Category (Month-to-Date)</h3>
+                <canvas id="category-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Daily Cash Flow (This Month)</h3>
+                <canvas id="cashflow-chart"></canvas>
+            </div>
+        </section>
+
+        <section class="chart-row">
+            <div class="chart-container">
+                <h3>Balance by Bank</h3>
+                <canvas id="balance-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Income vs Expenses (Month-to-Date)</h3>
+                <canvas id="income-expense-chart"></canvas>
+            </div>
+        </section>
+
+        <section class="table-section">
+            <h3>Yesterday's Transactions</h3>
+            <div id="transactions-table"></div>
+        </section>
+
+        <footer class="footer">
+            <span>Data sourced from Tiller Money via Google Sheets</span>
+        </footer>
+    </div>
+
+    <div class="modal-overlay" id="day-modal-overlay" onclick="dashboard.closeDayModal(event)">
+        <div class="modal" id="day-modal">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title" id="day-modal-title"></div>
+                    <div class="modal-subtitle" id="day-modal-subtitle"></div>
+                </div>
+                <button class="modal-close" onclick="dashboard.closeDayModal()">&times;</button>
+            </div>
+            <div id="day-modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // DATA — This section is replaced by the scheduled task
+        // with real data fetched from your Tiller Google Sheet.
+        // The structure below shows the expected format.
+        // ============================================================
+
+        const DATA = {
+            "generated": "2026-03-24T15:58:04.482835",
+            "month": "March 2026",
+            "yesterday": "2026-03-23",
+            "transactions": [
+                        {
+                                    "date": "2026-03-10",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -19.2,
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "person": "Shared"
+                        },
+                        {
+                                    "date": "2026-03-07",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -6.55,
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "person": "Shared"
+                        },
+                        {
+                                    "date": "2026-03-04",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -16.43,
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "person": "Shared"
+                        },
+                        {
+                                    "date": "2026-03-04",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -1350.0,
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "person": "Shared"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -17.75,
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "person": "Shared"
+                        },
+                        {
+                                    "date": "2026-03-21",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -12.99,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-14",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -34.4,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-14",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -9.95,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-10",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -62.37,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-10",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -45.0,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-09",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -336.0,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-07",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -8.8,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-04",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -308.23,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-04",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -49.27,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-04",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": 1350.0,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-03",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -90.0,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-03",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -100.0,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -155.53,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -47.36,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -30.0,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -56.03,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -481.41,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-01",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -40.0,
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "date": "2026-03-22",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -17.7,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-22",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -13.99,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-22",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -35.32,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-22",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -148.82,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-22",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -26.96,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-22",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -49.3,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-21",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -60.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-20",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -81.55,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-20",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -4.99,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-19",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -4.98,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-19",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -9.2,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-19",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -7.3,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-18",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -37.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-15",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -78.62,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-15",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -180.31,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-14",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -53.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-14",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -0.85,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-14",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -4.6,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-13",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -1.3,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-13",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -1.1,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-12",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -15.74,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-12",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -100.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-12",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -200.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-12",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -25.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-10",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -0.04,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-10",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -1.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-10",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -38648.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-09",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -0.7,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-09",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -13.53,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-08",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -6.6,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-08",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -63.78,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-07",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -60.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-07",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -11.52,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-05",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -43.96,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-04",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -11.19,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-04",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -7.15,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-03",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -33.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-03",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -639.75,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -1.1,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -60.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -5.1,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-02",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": 15129.0,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-01",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -7.09,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        },
+                        {
+                                    "date": "2026-03-01",
+                                    "description": "Unknown",
+                                    "category": "Income",
+                                    "amount": -154.8,
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "person": "Sandra"
+                        }
+            ],
+            "balances": [
+                        {
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "balance": 0.6,
+                                    "person": "Shared"
+                        },
+                        {
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "balance": 0.05,
+                                    "person": "Shared"
+                        },
+                        {
+                                    "account": "",
+                                    "bank": "CGD",
+                                    "balance": 1260.23,
+                                    "person": "Shared"
+                        },
+                        {
+                                    "account": "DANIEL BETTENCOURT NEVES",
+                                    "bank": "Bankinter",
+                                    "balance": 609.34,
+                                    "person": "Daniel"
+                        },
+                        {
+                                    "account": "SANDRA LUISA MIRANDA GUSMAO",
+                                    "bank": "Bankinter",
+                                    "balance": 10787.8,
+                                    "person": "Sandra"
+                        }
+            ]
+};        // ============================================================
+        // DASHBOARD LOGIC
+        // ============================================================
+
+        const COLORS = ['#6c5ce7', '#00b894', '#e17055', '#74b9ff', '#fdcb6e', '#a29bfe', '#fab1a0', '#81ecec'];
+        const BANK_COLORS = {
+            Bankinter: '#e74c3c',
+            CGD: '#74b9ff',
+            ActivoBank: '#f39c12',
+            Revolut: '#a29bfe'
+        };
+
+        function formatEUR(value) {
+            const abs = Math.abs(value);
+            const sign = value < 0 ? '-' : '';
+            return sign + abs.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+        }
+
+        class Dashboard {
+            constructor(data) {
+                this.data = data;
+                this.filteredTransactions = data.transactions;
+                this.charts = {};
+                this.init();
+            }
+
+            init() {
+                document.getElementById('date-info').textContent =
+                    `Yesterday: ${this.formatDate(this.data.yesterday)} · Month: ${this.data.month}`;
+
+                this.populateCategoryFilter();
+                this.renderKPIs();
+                this.renderCategoryChart();
+                this.renderCashFlowChart();
+                this.renderBalanceChart();
+                this.renderIncomeExpenseChart();
+                this.renderTransactionsTable();
+            }
+
+            formatDate(d) {
+                const date = new Date(d + 'T00:00:00');
+                return date.toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' });
+            }
+
+            populateCategoryFilter() {
+                const select = document.getElementById('filter-category');
+                const cats = [...new Set(this.data.transactions.map(t => t.category))].sort();
+                cats.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c;
+                    opt.textContent = c;
+                    select.appendChild(opt);
+                });
+            }
+
+            applyFilters() {
+                const person = document.getElementById('filter-person').value;
+                const bank = document.getElementById('filter-bank').value;
+                const cat = document.getElementById('filter-category').value;
+
+                this.filteredTransactions = this.data.transactions.filter(t => {
+                    if (person !== 'all' && (t.person || 'Shared') !== person) return false;
+                    if (bank !== 'all' && t.bank !== bank) return false;
+                    if (cat !== 'all' && t.category !== cat) return false;
+                    return true;
+                });
+
+                this.renderKPIs();
+                this.updateCharts();
+                this.renderTransactionsTable();
+            }
+
+            getYesterday() {
+                return this.filteredTransactions.filter(t => t.date === this.data.yesterday);
+            }
+
+            getMonthToDate() {
+                return this.filteredTransactions;
+            }
+
+            renderKPIs() {
+                const yesterday = this.getYesterday();
+                const mtd = this.getMonthToDate();
+
+                const yIncome = yesterday.filter(t => t.amount > 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                const yExpense = yesterday.filter(t => t.amount < 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                const yNet = yIncome + yExpense;
+
+                const mtdIncome = mtd.filter(t => t.amount > 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                const mtdExpense = mtd.filter(t => t.amount < 0 && !t.is_transfer).reduce((s, t) => s + t.amount, 0);
+                const mtdNet = mtdIncome + mtdExpense;
+
+                const totalBalance = this.data.balances.reduce((s, b) => s + b.balance, 0);
+                const txCount = yesterday.length;
+
+                const kpis = [
+                    { label: "Yesterday Net", value: formatEUR(yNet), change: yNet >= 0 ? 'positive' : 'negative', sub: `${txCount} transactions` },
+                    { label: "Yesterday Income", value: formatEUR(yIncome), change: 'positive', sub: formatEUR(yExpense) + ' expenses' },
+                    { label: "MTD Income", value: formatEUR(mtdIncome), change: 'positive', sub: `${mtd.filter(t => t.amount > 0 && !t.is_transfer).length} entries` },
+                    { label: "MTD Expenses", value: formatEUR(Math.abs(mtdExpense)), change: 'negative', sub: `${mtd.filter(t => t.amount < 0 && !t.is_transfer).length} entries` },
+                    { label: "MTD Net", value: formatEUR(mtdNet), change: mtdNet >= 0 ? 'positive' : 'negative', sub: 'income − expenses' },
+                    { label: "Total Balances", value: formatEUR(totalBalance), change: 'positive', sub: `${this.data.balances.length} accounts` },
+                ];
+
+                const row = document.getElementById('kpi-row');
+                row.innerHTML = kpis.map(k => `
+                    <div class="kpi-card">
+                        <div class="kpi-label">${k.label}</div>
+                        <div class="kpi-value kpi-change ${k.change}">${k.value}</div>
+                        <div class="kpi-sub">${k.sub}</div>
+                    </div>
+                `).join('');
+            }
+
+            renderCategoryChart() {
+                const mtd = this.getMonthToDate().filter(t => t.amount < 0 && !t.is_transfer);
+                const byCategory = {};
+                mtd.forEach(t => {
+                    byCategory[t.category] = (byCategory[t.category] || 0) + Math.abs(t.amount);
+                });
+
+                const sorted = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+                const labels = sorted.map(s => s[0]);
+                const data = sorted.map(s => s[1]);
+
+                const ctx = document.getElementById('category-chart').getContext('2d');
+                this.charts.category = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels,
+                        datasets: [{ data, backgroundColor: COLORS.map(c => c + 'CC'), borderColor: 'transparent', borderWidth: 0 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, cutout: '65%',
+                        plugins: {
+                            legend: { position: 'right', labels: { color: '#8b8fa3', usePointStyle: true, padding: 12, font: { size: 11 } } },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => {
+                                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                        return `${ctx.label}: ${formatEUR(ctx.parsed)} (${((ctx.parsed / total) * 100).toFixed(1)}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            renderCashFlowChart() {
+                const mtd = this.getMonthToDate().filter(t => !t.is_transfer);
+                const byDay = {};
+                mtd.forEach(t => {
+                    if (!byDay[t.date]) byDay[t.date] = { income: 0, expense: 0 };
+                    if (t.amount > 0) byDay[t.date].income += t.amount;
+                    else byDay[t.date].expense += t.amount;
+                });
+
+                const days = Object.keys(byDay).sort();
+                this.cashflowDays = days;
+                const income = days.map(d => byDay[d].income);
+                const expense = days.map(d => Math.abs(byDay[d].expense));
+                const labels = days.map(d => {
+                    const date = new Date(d + 'T00:00:00');
+                    return date.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
+                });
+
+                const ctx = document.getElementById('cashflow-chart').getContext('2d');
+                this.charts.cashflow = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Income', data: income, backgroundColor: '#00b89488', borderRadius: 4 },
+                            { label: 'Expenses', data: expense, backgroundColor: '#e1705588', borderRadius: 4 }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                const idx = elements[0].index;
+                                this.showDayModal(this.cashflowDays[idx]);
+                            }
+                        },
+                        plugins: {
+                            legend: { labels: { color: '#8b8fa3', usePointStyle: true, font: { size: 11 } } },
+                            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${formatEUR(ctx.parsed.y)}` } }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
+                            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8b8fa3', callback: v => formatEUR(v) } }
+                        }
+                    }
+                });
+            }
+
+            showDayModal(dateStr) {
+                // All transactions for this day (respecting current filters, excluding transfers)
+                const txns = this.filteredTransactions
+                    .filter(t => t.date === dateStr && !t.is_transfer)
+                    .sort((a, b) => a.amount - b.amount);
+
+                const dateLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-PT', {
+                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+                });
+                const income = txns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+                const expense = txns.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0);
+
+                document.getElementById('day-modal-title').textContent = dateLabel;
+                document.getElementById('day-modal-subtitle').textContent =
+                    `${txns.length} transaction${txns.length !== 1 ? 's' : ''} · Income ${formatEUR(income)} · Expenses ${formatEUR(Math.abs(expense))} · Net ${formatEUR(income + expense)}`;
+
+                let html = '';
+                if (txns.length === 0) {
+                    html = '<p style="color:var(--text-secondary);padding:12px 0">No transactions for this day with current filters.</p>';
+                } else {
+                    html = '<table class="data-table" style="width:100%"><thead><tr>';
+                    html += '<th>Description</th><th>Category</th><th>Bank</th><th>Person</th><th style="text-align:right">Amount</th>';
+                    html += '</tr></thead><tbody>';
+                    txns.forEach(t => {
+                        const amountClass = t.amount >= 0 ? 'amount-positive' : 'amount-negative';
+                        const person = t.person || 'Shared';
+                        const personColor = person === 'Daniel' ? '#74b9ff' : person === 'Sandra' ? '#fd79a8' : '#a29bfe';
+                        html += `<tr>
+                            <td>${t.description}</td>
+                            <td>${t.category}</td>
+                            <td><span class="bank-badge bank-${t.bank}">${t.bank}</span></td>
+                            <td><span style="font-size:11px;font-weight:600;color:${personColor}">${person}</span></td>
+                            <td style="text-align:right" class="${amountClass}">${formatEUR(t.amount)}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                }
+
+                document.getElementById('day-modal-body').innerHTML = html;
+                document.getElementById('day-modal-overlay').classList.add('open');
+            }
+
+            closeDayModal(event) {
+                // Close only if clicking the overlay itself (not the modal content)
+                if (event && event.target !== document.getElementById('day-modal-overlay')) return;
+                document.getElementById('day-modal-overlay').classList.remove('open');
+            }
+
+            renderBalanceChart() {
+                const labels = this.data.balances.map(b => b.bank);
+                const data = this.data.balances.map(b => b.balance);
+                const colors = labels.map(l => BANK_COLORS[l] || '#6c5ce7');
+
+                const ctx = document.getElementById('balance-chart').getContext('2d');
+                this.charts.balance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{ data, backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 1, borderRadius: 6 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: ctx => formatEUR(ctx.parsed.x) } }
+                        },
+                        scales: {
+                            x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8b8fa3', callback: v => formatEUR(v) } },
+                            y: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { weight: 'bold' } } }
+                        }
+                    }
+                });
+            }
+
+            renderIncomeExpenseChart() {
+                const mtd = this.getMonthToDate().filter(t => !t.is_transfer);
+                const totalIncome = mtd.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+                const totalExpense = Math.abs(mtd.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0));
+
+                const ctx = document.getElementById('income-expense-chart').getContext('2d');
+                this.charts.incomeExpense = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Income', 'Expenses', 'Net'],
+                        datasets: [{
+                            data: [totalIncome, totalExpense, totalIncome - totalExpense],
+                            backgroundColor: ['#00b89488', '#e1705588', totalIncome - totalExpense >= 0 ? '#6c5ce788' : '#e1705588'],
+                            borderColor: ['#00b894', '#e17055', totalIncome - totalExpense >= 0 ? '#6c5ce7' : '#e17055'],
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: ctx => formatEUR(ctx.parsed.y) } }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { weight: 'bold' } } },
+                            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8b8fa3', callback: v => formatEUR(v) } }
+                        }
+                    }
+                });
+            }
+
+            updateCharts() {
+                // Category (exclude transfers)
+                const mtdExp = this.getMonthToDate().filter(t => t.amount < 0 && !t.is_transfer);
+                const byCategory = {};
+                mtdExp.forEach(t => { byCategory[t.category] = (byCategory[t.category] || 0) + Math.abs(t.amount); });
+                const sorted = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+                this.charts.category.data.labels = sorted.map(s => s[0]);
+                this.charts.category.data.datasets[0].data = sorted.map(s => s[1]);
+                this.charts.category.update('none');
+
+                // Cashflow (exclude transfers)
+                const mtd = this.getMonthToDate().filter(t => !t.is_transfer);
+                const byDay = {};
+                mtd.forEach(t => {
+                    if (!byDay[t.date]) byDay[t.date] = { income: 0, expense: 0 };
+                    if (t.amount > 0) byDay[t.date].income += t.amount;
+                    else byDay[t.date].expense += t.amount;
+                });
+                const days = Object.keys(byDay).sort();
+                this.cashflowDays = days;
+                this.charts.cashflow.data.labels = days.map(d => new Date(d + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }));
+                this.charts.cashflow.data.datasets[0].data = days.map(d => byDay[d].income);
+                this.charts.cashflow.data.datasets[1].data = days.map(d => Math.abs(byDay[d].expense));
+                this.charts.cashflow.update('none');
+
+                // Income vs Expense (exclude transfers)
+                const totalIncome = mtd.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+                const totalExpense = Math.abs(mtd.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0));
+                this.charts.incomeExpense.data.datasets[0].data = [totalIncome, totalExpense, totalIncome - totalExpense];
+                this.charts.incomeExpense.update('none');
+            }
+
+            renderTransactionsTable() {
+                const yesterday = this.getYesterday().sort((a, b) => a.amount - b.amount);
+                const container = document.getElementById('transactions-table');
+
+                if (yesterday.length === 0) {
+                    container.innerHTML = '<p style="color: var(--text-secondary); padding: 20px 0;">No transactions for yesterday with current filters.</p>';
+                    return;
+                }
+
+                let html = '<table class="data-table"><thead><tr>';
+                html += '<th>Description</th><th>Category</th><th>Bank</th><th>Person</th><th style="text-align:right">Amount</th>';
+                html += '</tr></thead><tbody>';
+
+                yesterday.forEach(t => {
+                    const amountClass = t.amount >= 0 ? 'amount-positive' : 'amount-negative';
+                    const person = t.person || 'Shared';
+                    const personColor = person === 'Daniel' ? '#74b9ff' : person === 'Sandra' ? '#fd79a8' : '#a29bfe';
+                    const rowStyle = t.is_transfer ? ' style="opacity:0.55;font-style:italic;"' : '';
+                    const transferBadge = t.is_transfer ? ' <span style="font-size:10px;background:#6c5ce733;color:#a29bfe;border-radius:3px;padding:1px 5px;vertical-align:middle">transfer</span>' : '';
+                    html += `<tr${rowStyle}>
+                        <td>${t.description}${transferBadge}</td>
+                        <td>${t.category}</td>
+                        <td><span class="bank-badge bank-${t.bank}">${t.bank}</span></td>
+                        <td><span style="font-size:11px;font-weight:600;color:${personColor}">${person}</span></td>
+                        <td style="text-align:right" class="${amountClass}">${formatEUR(t.amount)}</td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            }
+        }
+
+        const dashboard = new Dashboard(DATA);
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') document.getElementById('day-modal-overlay').classList.remove('open');
+        });
+    </script>
+</body>
+</html>
