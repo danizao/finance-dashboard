@@ -280,6 +280,144 @@
             .kpi-row { grid-template-columns: repeat(2, 1fr); }
             .chart-row { grid-template-columns: 1fr; }
         }
+
+        /* CSV Upload */
+        .csv-upload-btn {
+            padding: 6px 14px;
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--accent);
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+        .csv-upload-btn:hover { background: rgba(108,92,231,0.15); }
+
+        .csv-mode-banner {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: rgba(108,92,231,0.1);
+            border: 1px solid rgba(108,92,231,0.25);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: var(--gap);
+        }
+        .csv-mode-banner.visible { display: flex; }
+        .csv-mode-banner strong { color: var(--accent); }
+        .csv-reset-btn {
+            margin-left: auto;
+            padding: 3px 10px;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .csv-reset-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.3); }
+
+        /* CSV column mapping modal */
+        .csv-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .csv-modal-overlay.open { display: flex; }
+        .csv-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px 32px;
+            width: min(560px, 96vw);
+            max-height: 88vh;
+            overflow-y: auto;
+        }
+        .csv-modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+        .csv-modal .csv-subtitle { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+        .csv-preview {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 18px;
+            max-height: 70px;
+            overflow: auto;
+            font-family: monospace;
+            white-space: pre;
+        }
+        .csv-field-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 12px;
+        }
+        .csv-field-label {
+            width: 135px;
+            flex-shrink: 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .csv-field-label em { font-size: 10px; display: block; opacity: 0.6; font-style: normal; }
+        .csv-field-row select, .csv-field-row input[type="text"] {
+            flex: 1;
+            padding: 7px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+        .csv-field-row select option { background: var(--bg-card); }
+        .csv-field-row input[type="text"]::placeholder { color: var(--text-secondary); }
+        .csv-separator { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+        .amount-mode-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+        .amount-mode-tab {
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-secondary);
+        }
+        .amount-mode-tab.active {
+            background: rgba(108,92,231,0.2);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .csv-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+        .btn-primary {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 6px;
+            background: var(--accent);
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-primary:hover { background: #5a4bd1; }
+        .btn-secondary {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .btn-secondary:hover { color: var(--text-primary); }
     </style>
 </head>
 <body>
@@ -312,8 +450,14 @@
                         <option value="all">All Categories</option>
                     </select>
                 </div>
+                <button class="csv-upload-btn" onclick="csvHandler.openFilePicker()">⬆ Upload CSV</button>
             </div>
         </header>
+
+        <div class="csv-mode-banner" id="csv-mode-banner">
+            <span>CSV mode: <strong id="csv-banner-filename"></strong></span>
+            <button class="csv-reset-btn" onclick="dashboard.resetToLiveData()">← Back to Live Data</button>
+        </div>
 
         <section class="kpi-row" id="kpi-row"></section>
 
@@ -340,12 +484,12 @@
         </section>
 
         <section class="table-section">
-            <h3>Yesterday's Transactions</h3>
+            <h3 id="transactions-table-title">Yesterday's Transactions</h3>
             <div id="transactions-table"></div>
         </section>
 
         <footer class="footer">
-            <span>Data sourced from Tiller Money via Google Sheets</span>
+            <span id="data-source-footer">Data sourced via Enable Banking API (PSD2)</span>
         </footer>
     </div>
 
@@ -359,6 +503,69 @@
                 <button class="modal-close" onclick="dashboard.closeDayModal()">&times;</button>
             </div>
             <div id="day-modal-body"></div>
+        </div>
+    </div>
+
+    <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none" onchange="csvHandler.onFileSelected(this)">
+
+    <div class="csv-modal-overlay" id="csv-modal-overlay">
+        <div class="csv-modal">
+            <h2>Import CSV Transactions</h2>
+            <p class="csv-subtitle">Map your CSV columns to the fields below. We've tried to auto-detect them.</p>
+            <div class="csv-preview" id="csv-preview"></div>
+
+            <div class="csv-field-row">
+                <div class="csv-field-label">Date <em>required</em></div>
+                <select id="csv-col-date"></select>
+            </div>
+            <div class="csv-field-row">
+                <div class="csv-field-label">Description <em>required</em></div>
+                <select id="csv-col-description"></select>
+            </div>
+
+            <hr class="csv-separator">
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Amount format:</div>
+            <div class="amount-mode-tabs">
+                <button class="amount-mode-tab active" id="amt-tab-single" onclick="csvHandler.setAmountMode('single')">Single column (signed)</button>
+                <button class="amount-mode-tab" id="amt-tab-split" onclick="csvHandler.setAmountMode('split')">Separate Debit / Credit columns</button>
+            </div>
+            <div id="amt-single-row" class="csv-field-row">
+                <div class="csv-field-label">Amount <em>required · negative = expense</em></div>
+                <select id="csv-col-amount"></select>
+            </div>
+            <div id="amt-split-rows" style="display:none">
+                <div class="csv-field-row">
+                    <div class="csv-field-label">Debit column <em>outflows (positive values)</em></div>
+                    <select id="csv-col-debit"></select>
+                </div>
+                <div class="csv-field-row">
+                    <div class="csv-field-label">Credit column <em>inflows (positive values)</em></div>
+                    <select id="csv-col-credit"></select>
+                </div>
+            </div>
+
+            <hr class="csv-separator">
+            <div class="csv-field-row">
+                <div class="csv-field-label">Bank column <em>optional</em></div>
+                <select id="csv-col-bank-col"></select>
+            </div>
+            <div class="csv-field-row">
+                <div class="csv-field-label">Default bank <em>fallback name</em></div>
+                <input type="text" id="csv-default-bank" placeholder="e.g. CGD, Bankinter…">
+            </div>
+            <div class="csv-field-row">
+                <div class="csv-field-label">Account column <em>optional</em></div>
+                <select id="csv-col-account"></select>
+            </div>
+            <div class="csv-field-row">
+                <div class="csv-field-label">Person column <em>optional</em></div>
+                <select id="csv-col-person"></select>
+            </div>
+
+            <div class="csv-modal-actions">
+                <button class="btn-secondary" onclick="csvHandler.closeModal()">Cancel</button>
+                <button class="btn-primary" onclick="csvHandler.importCSV()">Import Transactions</button>
+            </div>
         </div>
     </div>
 
@@ -1054,15 +1261,92 @@
                 return date.toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' });
             }
 
-            populateCategoryFilter() {
+            populateCategoryFilter(reset = false) {
                 const select = document.getElementById('filter-category');
+                if (reset) { while (select.options.length > 1) select.remove(1); }
+                const existing = new Set([...select.options].map(o => o.value));
                 const cats = [...new Set(this.data.transactions.map(t => t.category))].sort();
                 cats.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c;
-                    opt.textContent = c;
-                    select.appendChild(opt);
+                    if (!existing.has(c)) {
+                        const opt = document.createElement('option');
+                        opt.value = c; opt.textContent = c;
+                        select.appendChild(opt);
+                    }
                 });
+            }
+
+            updateBankFilter() {
+                const select = document.getElementById('filter-bank');
+                if (this.csvMode) {
+                    const banks = [...new Set(this.data.transactions.map(t => t.bank))].sort();
+                    select.innerHTML = '<option value="all">All Banks</option>' +
+                        banks.map(b => `<option value="${b}">${b}</option>`).join('');
+                } else {
+                    select.innerHTML = `<option value="all">All Banks</option>
+                        <option value="Bankinter">Bankinter</option>
+                        <option value="CGD">CGD</option>
+                        <option value="ActivoBank">ActivoBank</option>
+                        <option value="Revolut">Revolut</option>`;
+                }
+            }
+
+            loadCSVData(csvData, filename, skipped) {
+                this._liveData = this._liveData || { ...this.data };
+                this.data = csvData;
+                this.filteredTransactions = csvData.transactions;
+                this.csvMode = true;
+
+                document.getElementById('date-info').textContent =
+                    `Latest: ${this.formatDate(csvData.yesterday)} · Period: ${csvData.month}`;
+                document.getElementById('transactions-table-title').textContent =
+                    `Latest Transactions (${this.formatDate(csvData.yesterday)})`;
+                document.getElementById('csv-banner-filename').textContent = filename;
+                document.getElementById('csv-mode-banner').classList.add('visible');
+                document.getElementById('data-source-footer').textContent =
+                    `Loaded from CSV: ${filename}` + (skipped > 0 ? ` · ${skipped} rows skipped` : '');
+
+                document.getElementById('filter-person').value = 'all';
+                document.getElementById('filter-category').value = 'all';
+                this.updateBankFilter();
+                this.populateCategoryFilter(true);
+
+                Object.values(this.charts).forEach(c => c.destroy());
+                this.charts = {};
+
+                this.renderKPIs();
+                this.renderCategoryChart();
+                this.renderCashFlowChart();
+                this.renderBalanceChart();
+                this.renderIncomeExpenseChart();
+                this.renderTransactionsTable();
+            }
+
+            resetToLiveData() {
+                if (!this._liveData) return;
+                this.data = this._liveData;
+                this.filteredTransactions = this._liveData.transactions;
+                this.csvMode = false;
+
+                document.getElementById('date-info').textContent =
+                    `Yesterday: ${this.formatDate(this.data.yesterday)} · Month: ${this.data.month}`;
+                document.getElementById('transactions-table-title').textContent = "Yesterday's Transactions";
+                document.getElementById('csv-mode-banner').classList.remove('visible');
+                document.getElementById('data-source-footer').textContent = 'Data sourced via Enable Banking API (PSD2)';
+
+                document.getElementById('filter-person').value = 'all';
+                document.getElementById('filter-category').value = 'all';
+                this.updateBankFilter();
+                this.populateCategoryFilter(true);
+
+                Object.values(this.charts).forEach(c => c.destroy());
+                this.charts = {};
+
+                this.renderKPIs();
+                this.renderCategoryChart();
+                this.renderCashFlowChart();
+                this.renderBalanceChart();
+                this.renderIncomeExpenseChart();
+                this.renderTransactionsTable();
             }
 
             applyFilters() {
@@ -1378,10 +1662,244 @@
             }
         }
 
+        // ============================================================
+        // CSV IMPORT LOGIC
+        // ============================================================
+
+        const CATEGORY_RULES = [
+            { category: 'Income',        keywords: ['salary', 'salário', 'salario', 'ordenado', 'vencimento', 'invoice', 'rendimento', 'dividendo', 'reembolso irs', 'subsídio', 'subsidio'] },
+            { category: 'Groceries',     keywords: ['continente', 'pingo doce', 'lidl', 'aldi', 'minipreço', 'minipreco', 'mercadona', 'supermercado', 'intermarché', 'intermarche', 'jumbo'] },
+            { category: 'Dining',        keywords: ['restaurante', 'restaurant', 'café', 'cafe ', 'uber eats', 'glovo', 'just eat', 'pizza', 'pastelaria', 'padaria', 'sushi', 'mcdonalds', 'burger king', 'kfc', 'telepizza', 'cervejaria'] },
+            { category: 'Transport',     keywords: ['galp', ' bp ', 'repsol', 'cepsa', 'shell', 'uber', 'bolt', 'táxi', 'taxi', 'metro', 'comboio', 'portagem', 'via verde', 'autoestrada', 'combustível', 'combustivel'] },
+            { category: 'Utilities',     keywords: ['edp', 'endesa', 'galp energia', 'vodafone', 'meo', ' nos ', 'epal', 'smas', 'telecomunicações', 'telecomunicacoes'] },
+            { category: 'Housing',       keywords: ['renda', 'arrendamento', 'hipoteca', 'condomínio', 'condominio'] },
+            { category: 'Health',        keywords: ['farmácia', 'farmacia', 'médico', 'medico', 'hospital', 'clínica', 'clinica', 'dentista', 'óptica', 'optica', 'adse'] },
+            { category: 'Subscriptions', keywords: ['netflix', 'spotify', 'apple', 'google one', 'amazon prime', 'disney', 'hbo', 'claude', 'github', 'adobe', 'microsoft', 'dropbox', 'chatgpt', 'openai'] },
+            { category: 'Shopping',      keywords: ['amazon', 'zara', 'h&m', 'primark', 'ikea', 'fnac', 'worten', 'el corte', 'decathlon', 'mango', 'pull&bear', 'massimo dutti', 'bershka', 'stradivarius', 'leroy merlin'] },
+            { category: 'Insurance',     keywords: ['seguro', 'allianz', 'fidelidade', 'axa', 'generali', 'ageas', 'tranquilidade'] },
+            { category: 'Transfers',     keywords: ['transferência', 'transferencia', 'mbway', 'mb way', 'paypal', 'wise'] },
+            { category: 'Education',     keywords: ['escola', 'universidade', 'curso', 'formação', 'formacao', 'livraria'] },
+            { category: 'Entertainment', keywords: ['cinema', 'teatro', 'museu', 'viagem', 'hotel', 'airbnb', 'booking', 'expedia', 'ryanair', 'tap', 'easyjet'] },
+        ];
+
+        function categorizeTransaction(description) {
+            const desc = description.toLowerCase();
+            for (const rule of CATEGORY_RULES) {
+                for (const kw of rule.keywords) {
+                    if (desc.includes(kw)) return rule.category;
+                }
+            }
+            return 'Other';
+        }
+
+        function parseCSVText(text) {
+            const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+            const rows = [];
+            // Auto-detect delimiter (comma or semicolon)
+            const firstLine = lines.find(l => l.trim());
+            const delimiter = (firstLine && firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                const row = [];
+                let field = '', inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const ch = line[i];
+                    if (ch === '"') {
+                        if (inQuotes && line[i + 1] === '"') { field += '"'; i++; }
+                        else inQuotes = !inQuotes;
+                    } else if (ch === delimiter && !inQuotes) {
+                        row.push(field.trim()); field = '';
+                    } else { field += ch; }
+                }
+                row.push(field.trim());
+                rows.push(row);
+            }
+            return rows;
+        }
+
+        function reconcileTransfers(transactions) {
+            const matched = new Set();
+            for (let i = 0; i < transactions.length; i++) {
+                if (matched.has(i) || transactions[i].amount >= 0) continue;
+                for (let j = 0; j < transactions.length; j++) {
+                    if (i === j || matched.has(j) || transactions[j].amount <= 0) continue;
+                    if (Math.abs(Math.abs(transactions[i].amount) - Math.abs(transactions[j].amount)) > 0.01) continue;
+                    const di = new Date(transactions[i].date), dj = new Date(transactions[j].date);
+                    if (Math.abs((di - dj) / 86400000) <= 4) { matched.add(i); matched.add(j); break; }
+                }
+            }
+            return transactions.map((t, i) => ({ ...t, is_transfer: matched.has(i) }));
+        }
+
+        class CSVHandler {
+            constructor() {
+                this._rows = []; this._headers = []; this._filename = ''; this._amountMode = 'single';
+            }
+
+            openFilePicker() {
+                document.getElementById('csv-file-input').value = '';
+                document.getElementById('csv-file-input').click();
+            }
+
+            onFileSelected(input) {
+                if (!input.files || !input.files[0]) return;
+                this._filename = input.files[0].name;
+                const reader = new FileReader();
+                reader.onload = e => this._onFileRead(e.target.result);
+                reader.readAsText(input.files[0], 'UTF-8');
+            }
+
+            _onFileRead(text) {
+                const rows = parseCSVText(text);
+                if (rows.length < 2) { alert('CSV appears empty or has only a header row.'); return; }
+                this._headers = rows[0];
+                this._rows = rows.slice(1).filter(r => r.some(c => c));
+                this._openModal();
+            }
+
+            _openModal() {
+                const h = this._headers;
+                const opts = '<option value="">— Not mapped —</option>' +
+                    h.map((col, i) => `<option value="${i}">${col}</option>`).join('');
+                ['csv-col-date','csv-col-description','csv-col-amount','csv-col-debit','csv-col-credit',
+                 'csv-col-bank-col','csv-col-account','csv-col-person'].forEach(id => {
+                    document.getElementById(id).innerHTML = opts;
+                });
+
+                const guess = (...keywords) => {
+                    const idx = h.findIndex(col => keywords.some(k => col.toLowerCase().includes(k)));
+                    return idx >= 0 ? String(idx) : '';
+                };
+                document.getElementById('csv-col-date').value        = guess('date','data','fecha','datum','dt');
+                document.getElementById('csv-col-description').value = guess('desc','memo','detail','narration','payee','reference','movim');
+                document.getElementById('csv-col-amount').value      = guess('amount','montante','valor','importe','net','saldo movim');
+                document.getElementById('csv-col-debit').value       = guess('debit','débito','debito','saída','saida','out');
+                document.getElementById('csv-col-credit').value      = guess('credit','crédito','credito','entrada','in');
+                document.getElementById('csv-col-bank-col').value    = guess('bank','banco','institution');
+                document.getElementById('csv-col-account').value     = guess('account','conta','acc');
+                document.getElementById('csv-col-person').value      = guess('person','owner','titular','holder');
+
+                const preview = [h.join(' | '), ...this._rows.slice(0, 2).map(r => r.join(' | '))].join('\n');
+                document.getElementById('csv-preview').textContent = preview;
+                this.setAmountMode('single');
+                document.getElementById('csv-modal-overlay').classList.add('open');
+            }
+
+            setAmountMode(mode) {
+                this._amountMode = mode;
+                document.getElementById('amt-tab-single').classList.toggle('active', mode === 'single');
+                document.getElementById('amt-tab-split').classList.toggle('active', mode === 'split');
+                document.getElementById('amt-single-row').style.display = mode === 'single' ? 'flex' : 'none';
+                document.getElementById('amt-split-rows').style.display = mode === 'split' ? 'block' : 'none';
+            }
+
+            closeModal() { document.getElementById('csv-modal-overlay').classList.remove('open'); }
+
+            _col(id) { const v = document.getElementById(id).value; return v === '' ? -1 : parseInt(v); }
+
+            _parseDate(str) {
+                if (!str) return null;
+                if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+                const m = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+                if (m) {
+                    const y = m[3].length === 2 ? '20' + m[3] : m[3];
+                    return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+                }
+                return null;
+            }
+
+            _parseAmount(str) {
+                if (!str || !str.trim() || str.trim() === '-') return null;
+                let s = str.replace(/[€$£¥\s]/g, '');
+                const ci = s.lastIndexOf(','), di = s.lastIndexOf('.');
+                if (ci > di) s = s.replace(/\./g, '').replace(',', '.');
+                else s = s.replace(/,/g, '');
+                const v = parseFloat(s);
+                return isNaN(v) ? null : v;
+            }
+
+            importCSV() {
+                const dateCol = this._col('csv-col-date');
+                const descCol = this._col('csv-col-description');
+                const amtCol  = this._col('csv-col-amount');
+                const debitCol = this._col('csv-col-debit');
+                const creditCol = this._col('csv-col-credit');
+                const bankColIdx = this._col('csv-col-bank-col');
+                const accountColIdx = this._col('csv-col-account');
+                const personColIdx = this._col('csv-col-person');
+                const defaultBank = document.getElementById('csv-default-bank').value.trim() || 'CSV';
+
+                if (dateCol === -1) { alert('Please map the Date column.'); return; }
+                if (descCol === -1) { alert('Please map the Description column.'); return; }
+                if (this._amountMode === 'single' && amtCol === -1) { alert('Please map the Amount column.'); return; }
+                if (this._amountMode === 'split' && debitCol === -1 && creditCol === -1) {
+                    alert('Please map at least one of Debit or Credit columns.'); return;
+                }
+
+                const transactions = [];
+                let skipped = 0;
+
+                for (const row of this._rows) {
+                    const dateStr = this._parseDate((row[dateCol] || '').trim());
+                    const description = (row[descCol] || '').trim();
+                    if (!dateStr || !description) { skipped++; continue; }
+
+                    let amount;
+                    if (this._amountMode === 'single') {
+                        amount = this._parseAmount(row[amtCol] || '');
+                    } else {
+                        const debit  = debitCol  >= 0 ? this._parseAmount(row[debitCol]  || '') : null;
+                        const credit = creditCol >= 0 ? this._parseAmount(row[creditCol] || '') : null;
+                        if (debit != null && debit !== 0) amount = -Math.abs(debit);
+                        else if (credit != null && credit !== 0) amount = Math.abs(credit);
+                        else amount = 0;
+                    }
+                    if (amount === null) { skipped++; continue; }
+
+                    const bank    = bankColIdx    >= 0 ? ((row[bankColIdx]    || defaultBank).trim()) : defaultBank;
+                    const account = accountColIdx >= 0 ? ((row[accountColIdx] || '').trim()) : '';
+                    const person  = personColIdx  >= 0 ? ((row[personColIdx]  || 'Shared').trim()) : 'Shared';
+
+                    transactions.push({
+                        date: dateStr, description,
+                        category: categorizeTransaction(description),
+                        amount, account, bank, person, is_transfer: false
+                    });
+                }
+
+                if (transactions.length === 0) {
+                    alert(`No valid transactions parsed. ${skipped} rows skipped.`); return;
+                }
+
+                const reconciledTxns = reconcileTransfers(transactions);
+                reconciledTxns.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+                const dates = reconciledTxns.map(t => t.date).sort();
+                const yesterday = dates[dates.length - 1];
+                const first = new Date(dates[0] + 'T00:00:00');
+                const last  = new Date(yesterday + 'T00:00:00');
+                const sameMonth = first.getMonth() === last.getMonth() && first.getFullYear() === last.getFullYear();
+                const month = sameMonth
+                    ? last.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })
+                    : `${first.toLocaleDateString('pt-PT', { month: 'short' })}–${last.toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })}`;
+
+                this.closeModal();
+                window.dashboard.loadCSVData({
+                    generated: new Date().toISOString(), month, yesterday,
+                    transactions: reconciledTxns, balances: []
+                }, this._filename, skipped);
+            }
+        }
+
+        const csvHandler = new CSVHandler();
+
         const dashboard = new Dashboard(DATA);
 
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') document.getElementById('day-modal-overlay').classList.remove('open');
+            if (e.key === 'Escape') {
+                document.getElementById('day-modal-overlay').classList.remove('open');
+                document.getElementById('csv-modal-overlay').classList.remove('open');
+            }
         });
     </script>
 </body>
